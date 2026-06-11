@@ -16,8 +16,6 @@ env/
 dist/
 build/
 
-# FAISS index (rebuild from source)
-app/data/faiss_index/
 
 # Logs
 logs/
