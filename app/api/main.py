@@ -16,15 +16,8 @@ from app.services.vector_store import delete_vector_store
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Initialize the RAG service at startup and clean up on shutdown.
-    Using lifespan (FastAPI v0.93+) instead of deprecated on_event.
-    """
     setup_logger()
-    logger.info("Starting Water Quality RAG API…")
-    service = get_rag_service()
-    service.initialize()
-    logger.info("API startup complete — RAG service is ready")
+    logger.info("Starting Water Quality RAG API...")
     yield
     logger.info("API shutdown")
 
@@ -305,3 +298,10 @@ async def rebuild_index(service: WaterQualityRAGService = Depends(get_rag_servic
     service.initialize()
 
     return {"status": "success", "message": "FAISS index rebuilt successfully"}
+
+@app.get("/")
+async def root():
+    return {
+        "message": "Water Quality RAG API Running",
+        "status": "ok"
+    }

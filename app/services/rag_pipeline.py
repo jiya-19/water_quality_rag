@@ -179,9 +179,8 @@ class WaterQualityRAGService:
               - model (str): The LLM model used.
         """
         if not self._is_initialized:
-            raise RuntimeError(
-                "RAG service is not initialized. Call `service.initialize()` first."
-            )
+            logger.info("Lazy loading RAG service...")
+            self.initialize()
 
         # ── Topic Guard ──────────────────────────────────────
         if not is_water_quality_related(query):

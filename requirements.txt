@@ -31,8 +31,6 @@ uvicorn[standard]==0.30.6
 pydantic==2.8.2
 python-multipart==0.0.9
 
-# ── Prototype UI ────────────────────────────────────────────
-streamlit==1.37.1
 
 # ── Utilities ───────────────────────────────────────────────
 python-dotenv==1.0.1
