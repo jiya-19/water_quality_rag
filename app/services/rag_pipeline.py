@@ -27,17 +27,12 @@ Language) chain for clean composition and future streaming support.
 
 from typing import Any
 
-from langchain.chains import RetrievalQA
-from langchain_core.documents import Document
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
 from langchain_groq import ChatGroq
 
 from app.core.config import settings
 from app.core.logger import logger
-from app.services.data_loader import load_all_documents
-from app.services.vector_store import create_retriever, get_or_create_vector_store
+from app.services.simple_retriever import SimpleRetriever
 from app.utils.topic_guard import get_off_topic_response, is_water_quality_related
 
 
@@ -81,22 +76,49 @@ def _build_prompt() -> ChatPromptTemplate:
 
 # ── Context Formatter ──────────────────────────────────────────
 
-def _format_docs(docs: list[Document]) -> str:
+def _format_matched_rows(matched_items: list[dict]) -> str:
     """
-    Format retrieved documents into a single context string.
+    Format matched rows and WHO guidelines into a single context string.
     Numbers each source for traceability.
     """
-    if not docs:
+    if not matched_items:
         return "No relevant data found in the knowledge base."
     parts = []
-    for i, doc in enumerate(docs, 1):
-        source = doc.metadata.get("source", "unknown")
-        label = (
-            doc.metadata.get("water_body", "Dataset Record")
-            if source == "dataset"
-            else doc.metadata.get("topic", "WHO Guideline")
-        )
-        parts.append(f"[Source {i} — {source.upper()} | {label}]\n{doc.page_content}")
+    for i, item in enumerate(matched_items, 1):
+        source = item.get("source", "unknown")
+        if source == "dataset":
+            water_body = item.get("water_body", "Unknown")
+            location = item.get("location", "Unknown")
+            wqi = item.get("wqi", "N/A")
+            category = item.get("wqi_category", "Unknown")
+            ph = item.get("ph", "N/A")
+            do = item.get("do", "N/A")
+            bod = item.get("bod", "N/A")
+            tds = item.get("tds", "N/A")
+            turbidity = item.get("turbidity", "N/A")
+            nitrate = item.get("nitrate", "N/A")
+            coliform = item.get("coliform", "N/A")
+
+            content = (
+                f"Water Body: {water_body}\n"
+                f"Location: {location}\n"
+                f"WQI: {wqi}\n"
+                f"Category: {category}\n"
+                f"pH: {ph}\n"
+                f"DO: {do}\n"
+                f"BOD: {bod}\n"
+                f"TDS: {tds}\n"
+                f"Turbidity: {turbidity}\n"
+                f"Nitrate: {nitrate}\n"
+                f"Coliform: {coliform}"
+            )
+            label = water_body
+        else:
+            topic = item.get("topic", "WHO Guideline")
+            content = item.get("content", "")
+            label = topic
+
+        parts.append(f"[Source {i} — {source.upper()} | {label}]\n{content}")
     return "\n\n".join(parts)
 
 
@@ -114,16 +136,14 @@ class WaterQualityRAGService:
 
     def __init__(self) -> None:
         self._llm: ChatGroq | None = None
-        self._retriever = None
-        self._chain = None
+        self._retriever: SimpleRetriever | None = None
         self._is_initialized = False
 
     def initialize(self, csv_path: str | None = None) -> None:
         """
-        Initialize the full RAG pipeline:
-          1. Load / create the FAISS vector store.
+        Initialize the RAG service:
+          1. Instantiate SimpleRetriever (loads CSV).
           2. Create the Groq LLM client.
-          3. Build the LCEL chain.
 
         Args:
             csv_path: Optional override for the CSV dataset path.
@@ -132,48 +152,22 @@ class WaterQualityRAGService:
             logger.debug("RAG service already initialized — skipping")
             return
 
-        logger.info("Initializing Water Quality RAG service…")
+        logger.info("Initializing Water Quality RAG service using SimpleRetriever...")
 
-        # Step 1: Load or build vector store
-        from app.services.vector_store import (
-                    get_or_create_vector_store,
-                    load_vector_store,
-                )
-
-        if settings.faiss_index_path_obj.exists():
-            vector_store = load_vector_store()
-        else:
-            documents = load_all_documents(csv_path)
-            vector_store = get_or_create_vector_store(documents)
-        
-        self._retriever = create_retriever(vector_store)
+        # Step 1: Initialize Retriever
+        self._retriever = SimpleRetriever(csv_path)
 
         # Step 2: Initialize Groq LLM
         logger.info("Initializing Groq...")
-
+        api_key = settings.groq_api_key or "gsk_dummy_api_key_to_pass_validation"
         self._llm = ChatGroq(
-            groq_api_key=settings.groq_api_key,
+            groq_api_key=api_key,
             model_name=settings.groq_model_name,
             temperature=0.1,
             max_tokens=1024,
         )
-
         logger.info("Groq initialized")
 
-        # Step 3: Build LCEL chain
-        logger.info("Building LCEL chain...")
-        prompt = _build_prompt()
-        self._chain = (
-            {
-                "context": self._retriever | _format_docs,
-                "question": RunnablePassthrough(),
-            }
-            | prompt
-            | self._llm
-            | StrOutputParser()
-        )
-
-        logger.info("LCEL chain built")
         self._is_initialized = True
         logger.info("RAG service initialized successfully")
 
@@ -210,23 +204,30 @@ class WaterQualityRAGService:
         # ── Retrieval + Generation ───────────────────────────
         logger.info(f"Processing query: '{query[:80]}'")
         try:
-            # Retrieve relevant documents for source attribution
-            retrieved_docs: list[Document] = self._retriever.invoke(query)
+            # Retrieve relevant records
+            matched_rows = self._retriever.search(query)
 
-            # Generate answer via the LCEL chain
-            answer: str = self._chain.invoke(query)
+            # Build context from matched rows
+            context_str = _format_matched_rows(matched_rows)
 
-            # Build source metadata for API / UI display
+            # Generate answer via prompt template + Groq invocation
+            prompt = _build_prompt()
+            formatted_prompt = prompt.format_messages(context=context_str, question=query)
+            
+            response = self._llm.invoke(formatted_prompt)
+            answer = response.content
+
+            # Build source metadata for API / UI display exactly as before
             sources = [
                 {
-                    "source": doc.metadata.get("source", "unknown"),
-                    "water_body": doc.metadata.get("water_body", ""),
-                    "location": doc.metadata.get("location", ""),
-                    "topic": doc.metadata.get("topic", ""),
-                    "wqi": doc.metadata.get("wqi", None),
-                    "wqi_category": doc.metadata.get("wqi_category", ""),
+                    "source": item.get("source", "unknown"),
+                    "water_body": item.get("water_body", ""),
+                    "location": item.get("location", ""),
+                    "topic": item.get("topic", ""),
+                    "wqi": item.get("wqi", None),
+                    "wqi_category": item.get("wqi_category", ""),
                 }
-                for doc in retrieved_docs
+                for item in matched_rows
             ]
 
             logger.info(f"Response generated | sources retrieved: {len(sources)}")

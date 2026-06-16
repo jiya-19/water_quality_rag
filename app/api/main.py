@@ -9,7 +9,6 @@ from app.core.config import settings
 from app.core.logger import logger, setup_logger
 from app.services.data_loader import load_data
 from app.services.rag_pipeline import WaterQualityRAGService, get_rag_service
-from app.services.vector_store import delete_vector_store
 
 
 # ── Lifespan: startup / shutdown ──────────────────────────────
@@ -18,6 +17,12 @@ from app.services.vector_store import delete_vector_store
 async def lifespan(app: FastAPI):
     setup_logger()
     logger.info("Starting Water Quality RAG API...")
+    # Initialize RAG service on startup
+    from app.services.rag_pipeline import rag_service
+    try:
+        rag_service.initialize()
+    except Exception as e:
+        logger.error(f"Failed to initialize RAG service on startup: {e}")
     yield
     logger.info("API shutdown")
 
@@ -285,15 +290,14 @@ async def list_water_bodies(
 @app.post("/admin/rebuild-index", tags=["Admin"])
 async def rebuild_index(service: WaterQualityRAGService = Depends(get_rag_service)):
     """
-    Delete the current FAISS index and rebuild it from scratch.
+    Reload the dataset CSV and reinitialize the SimpleRetriever.
     Use this endpoint after updating the dataset CSV.
 
     ⚠️  Protect this endpoint with authentication in production.
     """
-    logger.warning("Index rebuild requested via API")
-    delete_vector_store()
+    logger.warning("Dataset reload requested via API")
 
-    # Reinitialize forces a fresh build
+    # Reinitialize forces a fresh load of the dataset CSV
     service._is_initialized = False
     service.initialize()
 

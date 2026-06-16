@@ -13,7 +13,6 @@ import pandas as pd
 from app.core.config import settings
 from app.core.logger import setup_logger
 from app.services.rag_pipeline import rag_service
-from app.services.vector_store import delete_vector_store
 
 
 # ── Page configuration ────────────────────────────────────────
@@ -120,7 +119,7 @@ def _render_sidebar():
         #     width=60,
         # )
         st.markdown("## 💧 Water Quality Assistant")
-        st.markdown("*Powered by Groq + LangChain + FAISS*")
+        st.markdown("*Powered by Groq + LangChain + RapidFuzz*")
         st.divider()
 
         # # ── Dataset stats ────────────────────────────────────
@@ -160,18 +159,18 @@ def _render_sidebar():
         # ── Model info ───────────────────────────────────────
         st.markdown("### ⚙️ Configuration")
         st.code(f"Model: {settings.groq_model_name}", language=None)
-        st.code(f"Embeddings: all-MiniLM-L6-v2", language=None)
+        st.code(f"Retriever: RapidFuzz + Pandas", language=None)
         st.code(f"Top-K: {settings.top_k_results}", language=None)
 
         st.divider()
 
         # ── Admin: Rebuild index ─────────────────────────────
         st.markdown("### 🔧 Admin")
-        if st.button("🔄 Rebuild FAISS Index", use_container_width=True):
-            with st.spinner("Rebuilding index…"):
-                delete_vector_store()
+        if st.button("🔄 Reload Dataset", use_container_width=True):
+            with st.spinner("Reloading dataset…"):
+                rag_service._is_initialized = False
                 st.cache_resource.clear()
-                st.success("Index cleared! Refresh the page to rebuild.")
+                st.success("Dataset reloaded! Refresh the page.")
 
         # ── Clear chat ───────────────────────────────────────
         if st.button("🗑️ Clear Chat History", use_container_width=True):

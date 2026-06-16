@@ -1,22 +1,11 @@
 """
 scripts/build_index.py
 ──────────────────────────────────────────────────────────────
-Standalone script to build (or rebuild) the FAISS vector index.
-
-Run this once before starting the Streamlit app or FastAPI server,
-or any time the dataset is updated.
+Helper script to verify the SimpleRetriever search and ranking logic.
 
 Usage:
     python scripts/build_index.py
     python scripts/build_index.py --csv path/to/custom_data.csv
-    python scripts/build_index.py --force   # Rebuild even if index exists
-
-The script:
-  1. Loads the water quality CSV dataset.
-  2. Loads the WHO guidelines knowledge base.
-  3. Converts all records to LangChain Documents.
-  4. Generates HuggingFace embeddings (all-MiniLM-L6-v2).
-  5. Saves the FAISS index to the path defined in .env.
 """
 
 import argparse
@@ -30,72 +19,68 @@ sys.path.insert(0, str(ROOT))
 
 from app.core.config import settings
 from app.core.logger import logger, setup_logger
-from app.services.data_loader import load_all_documents
-from app.services.vector_store import (
-    create_vector_store,
-    delete_vector_store,
-)
+from app.services.simple_retriever import SimpleRetriever
 
 
 def main(csv_path: str | None = None, force: bool = False) -> None:
     setup_logger()
 
     logger.info("=" * 60)
-    logger.info("Water Quality FAISS Index Builder")
+    logger.info("Water Quality SimpleRetriever Verification")
     logger.info("=" * 60)
 
-    index_path = settings.faiss_index_path_obj
-
     # ── Check if rebuild is needed ────────────────────────────
-    if index_path.exists() and not force:
-        logger.warning(
-            f"FAISS index already exists at '{index_path}'. "
-            "Use --force to rebuild it."
-        )
-        print(f"\n✅ Index already exists at: {index_path}")
-        print("   Use --force flag to rebuild it.\n")
-        return
-
-    if index_path.exists() and force:
-        logger.info("Force rebuild: deleting existing index…")
-        delete_vector_store()
-
-    # ── Load documents ────────────────────────────────────────
-    logger.info("Loading documents from dataset and WHO guidelines…")
+    # ── Initialize SimpleRetriever ────────────────────────────────
+    logger.info("Initializing SimpleRetriever...")
     t0 = time.time()
     try:
-        documents = load_all_documents(csv_path)
+        retriever = SimpleRetriever(csv_path)
     except FileNotFoundError as exc:
         logger.error(str(exc))
-        print(f"\n❌ Error: {exc}")
+        print(f"\n[ERROR] Error: {exc}")
         print(f"   Expected CSV at: {settings.dataset_path}")
         sys.exit(1)
 
-    logger.info(f"Loaded {len(documents)} documents in {time.time() - t0:.1f}s")
-
-    # ── Build index ───────────────────────────────────────────
-    logger.info("Building FAISS index (this may take a minute)…")
-    t1 = time.time()
-    vector_store = create_vector_store(documents)
-    elapsed = time.time() - t1
+    elapsed = time.time() - t0
+    logger.info(f"Loaded retriever and dataset in {elapsed:.2f}s")
 
     # ── Sanity check: test a retrieval ────────────────────────
-    logger.info("Running sanity check retrieval…")
-    test_query = "What is the water quality of Sabarmati River?"
-    results = vector_store.similarity_search(test_query, k=2)
-    logger.info(f"Sanity check: retrieved {len(results)} documents for test query")
-    for i, doc in enumerate(results):
-        logger.debug(f"  Result {i+1}: {doc.page_content[:80]}…")
+    logger.info("Running sanity check retrieval 1 (Water Body)…")
+    test_query_1 = "What is the water quality of MAT RIVER?"
+    t1 = time.time()
+    results_1 = retriever.search(test_query_1, top_k=5)
+    query_elapsed_1 = time.time() - t1
 
-    # ── Summary ───────────────────────────────────────────────
+    logger.info("Running sanity check retrieval 2 (WHO Guideline)…")
+    test_query_2 = "What is the WHO limit for pH?"
+    t2 = time.time()
+    results_2 = retriever.search(test_query_2, top_k=5)
+    query_elapsed_2 = time.time() - t2
+
     print("\n" + "=" * 60)
-    print("✅ FAISS Index Built Successfully")
+    print("[OK] SimpleRetriever Operational")
     print("=" * 60)
-    print(f"  Documents indexed : {len(documents)}")
-    print(f"  Index saved at    : {settings.faiss_index_path}")
-    print(f"  Time taken        : {elapsed:.1f}s")
-    print(f"  Embedding model   : {settings.embedding_model_name}")
-    print(f"  Sanity check      : {len(results)} docs retrieved ✓")
+    print(f"  Dataset size      : {len(retriever.dataset)} rows")
+    print(f"  Query 1           : '{test_query_1}'")
+    print(f"  Retrieval time 1  : {query_elapsed_1*1000:.1f}ms")
+    print("  Top 3 Matches for Query 1:")
+    for i, res in enumerate(results_1[:3], 1):
+        source_type = res.get("source", "unknown").upper()
+        if source_type == "DATASET":
+            print(f"    {i}. [{source_type}] Water Body: {res.get('water_body')} | Location: {res.get('location')} | WQI: {res.get('wqi')}")
+        else:
+            print(f"    {i}. [{source_type}] Topic: {res.get('topic')}")
+            
+    print("-" * 60)
+    print(f"  Query 2           : '{test_query_2}'")
+    print(f"  Retrieval time 2  : {query_elapsed_2*1000:.1f}ms")
+    print("  Top 3 Matches for Query 2:")
+    for i, res in enumerate(results_2[:3], 1):
+        source_type = res.get("source", "unknown").upper()
+        if source_type == "DATASET":
+            print(f"    {i}. [{source_type}] Water Body: {res.get('water_body')} | Location: {res.get('location')} | WQI: {res.get('wqi')}")
+        else:
+            print(f"    {i}. [{source_type}] Topic: {res.get('topic')}")
     print("=" * 60)
     print("\nYou can now start the app:")
     print("  Streamlit : streamlit run app/ui/streamlit_app.py")
@@ -104,7 +89,7 @@ def main(csv_path: str | None = None, force: bool = False) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Build or rebuild the FAISS vector index for Water Quality RAG"
+        description="Verify SimpleRetriever search capabilities for Water Quality RAG"
     )
     parser.add_argument(
         "--csv",
@@ -115,7 +100,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Rebuild the index even if it already exists",
+        help="Ignored (kept for backwards compatibility)",
     )
     args = parser.parse_args()
     main(csv_path=args.csv, force=args.force)

@@ -204,3 +204,51 @@ class TestConfig:
         assert len(origins) == 2
         assert "http://localhost:3000" in origins
         assert "http://localhost:5173" in origins
+
+
+# ── Simple Retriever Tests ────────────────────────────────────
+
+class TestSimpleRetriever:
+    """Tests for app/services/simple_retriever.py"""
+
+    def test_simple_retriever_exact_and_fuzzy(self, tmp_path):
+        """SimpleRetriever should retrieve exact, partial, and fuzzy matches."""
+        from app.services.simple_retriever import SimpleRetriever
+
+        csv_content = (
+            "Water Body Name,Location,Latitude,Longitude,Year,pH,"
+            "Dissolved Oxygen (DO),Biological Oxygen Demand (BOD),"
+            "Total Dissolved Solids (TDS),Turbidity,Nitrate,Coliform,"
+            "Water Quality Index (WQI),Water Quality Category\n"
+            "Sabarmati River,Ahmedabad,23.0,72.0,2025,7.2,6.5,2.1,310,3.4,1.2,10,82.0,Good\n"
+            "Tapi River,Surat,21.0,72.5,2025,7.5,6.0,2.5,290,3.0,1.5,15,78.0,Good\n"
+        )
+        csv_file = tmp_path / "test_data.csv"
+        csv_file.write_text(csv_content)
+
+        retriever = SimpleRetriever(csv_path=csv_file)
+        assert len(retriever.dataset) == 2
+
+        # 1. Exact match query
+        results = retriever.search("Sabarmati River", top_k=2)
+        assert len(results) > 0
+        assert results[0]["water_body"] == "Sabarmati River"
+        assert results[0]["source"] == "dataset"
+
+        # 2. Fuzzy match query
+        results_fuzzy = retriever.search("Sabarmati", top_k=2)
+        assert len(results_fuzzy) > 0
+        assert results_fuzzy[0]["water_body"] == "Sabarmati River"
+
+        # 3. Location match query
+        results_loc = retriever.search("Surat", top_k=2)
+        assert len(results_loc) > 0
+        assert results_loc[0]["location"] == "Surat"
+        assert results_loc[0]["water_body"] == "Tapi River"
+
+        # 4. WHO guideline search
+        results_who = retriever.search("WHO pH limit", top_k=5)
+        # Check if WHO guidelines for pH are retrieved
+        who_sources = [r for r in results_who if r["source"] == "who_guidelines"]
+        assert len(who_sources) > 0
+        assert any(r["topic"] == "pH" for r in who_sources)
