@@ -159,9 +159,8 @@ class WaterQualityRAGService:
 
         # Step 2: Initialize Groq LLM
         logger.info("Initializing Groq...")
-        api_key = settings.groq_api_key or "gsk_dummy_api_key_to_pass_validation"
         self._llm = ChatGroq(
-            groq_api_key=api_key,
+            groq_api_key=settings.groq_api_key,
             model_name=settings.groq_model_name,
             temperature=0.1,
             max_tokens=1024,
