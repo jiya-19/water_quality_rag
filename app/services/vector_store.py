@@ -82,27 +82,31 @@ def create_vector_store(documents: list[Document]) -> FAISS:
 def load_vector_store() -> FAISS:
     """
     Load a previously persisted FAISS index from disk.
-
-    Returns:
-        A FAISS vector store instance.
-
-    Raises:
-        FileNotFoundError: If the index directory doesn't exist.
     """
+
     index_path = settings.faiss_index_path_obj
+
     if not index_path.exists():
         raise FileNotFoundError(
             f"FAISS index not found at '{index_path}'. "
-            "Run `scripts/build_index.py` first to create the index."
+            "Run scripts/build_index.py first."
         )
+
     logger.info(f"Loading FAISS index from '{index_path}'")
+
+    logger.info("STEP 1 - Loading embeddings")
     embeddings = get_embeddings()
+
+    logger.info("STEP 2 - Loading FAISS index")
+
     vector_store = FAISS.load_local(
         str(index_path),
         embeddings,
-        allow_dangerous_deserialization=True,  # Safe: we created this file ourselves
+        allow_dangerous_deserialization=True,
     )
-    logger.info("FAISS index loaded successfully")
+
+    logger.info("STEP 3 - FAISS loaded successfully")
+
     return vector_store
 
 
@@ -111,31 +115,23 @@ def get_or_create_vector_store(
 ) -> FAISS:
     """
     Smart loader: returns an existing FAISS index if found on disk,
-    otherwise builds and saves a new one from `documents`.
-
-    This is the primary entry point used by the application.
-    Call it at startup; the result is cached in the RAG service.
-
-    Args:
-        documents: Required only if the index doesn't exist yet.
-
-    Returns:
-        FAISS vector store ready for similarity search.
-
-    Raises:
-        ValueError: If no index exists and no documents are provided.
+    otherwise builds and saves a new one from documents.
     """
+
     index_path = settings.faiss_index_path_obj
+
     if index_path.exists():
-        logger.info("Existing FAISS index found — loading from disk (no re-embedding)")
+        logger.info(
+            "Existing FAISS index found — loading from disk (no re-embedding)"
+        )
         return load_vector_store()
 
     if documents is None:
         raise ValueError(
-            "No FAISS index found on disk and no documents provided to build one. "
-            "Provide `documents` argument or run `scripts/build_index.py`."
+            "No FAISS index found on disk and no documents provided."
         )
-    logger.info("No existing index — building new FAISS index from documents")
+
+    logger.info("No existing index — building new FAISS index")
     return create_vector_store(documents)
 
 

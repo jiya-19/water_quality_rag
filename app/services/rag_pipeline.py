@@ -135,19 +135,33 @@ class WaterQualityRAGService:
         logger.info("Initializing Water Quality RAG service…")
 
         # Step 1: Load or build vector store
-        documents = load_all_documents(csv_path)
-        vector_store = get_or_create_vector_store(documents)
+        from app.services.vector_store import (
+                    get_or_create_vector_store,
+                    load_vector_store,
+                )
+
+        if settings.faiss_index_path_obj.exists():
+            vector_store = load_vector_store()
+        else:
+            documents = load_all_documents(csv_path)
+            vector_store = get_or_create_vector_store(documents)
+        
         self._retriever = create_retriever(vector_store)
 
         # Step 2: Initialize Groq LLM
+        logger.info("Initializing Groq...")
+
         self._llm = ChatGroq(
             groq_api_key=settings.groq_api_key,
             model_name=settings.groq_model_name,
-            temperature=0.1,          # Low temp for factual, consistent answers
+            temperature=0.1,
             max_tokens=1024,
         )
 
+        logger.info("Groq initialized")
+
         # Step 3: Build LCEL chain
+        logger.info("Building LCEL chain...")
         prompt = _build_prompt()
         self._chain = (
             {
@@ -159,6 +173,7 @@ class WaterQualityRAGService:
             | StrOutputParser()
         )
 
+        logger.info("LCEL chain built")
         self._is_initialized = True
         logger.info("RAG service initialized successfully")
 
