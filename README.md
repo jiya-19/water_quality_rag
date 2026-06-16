@@ -103,7 +103,6 @@ Open http://localhost:8000/docs for the interactive API documentation.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/chat` | Ask a water quality question |
-| `POST` | `/compare` | Compare two water bodies |
 | `GET` | `/waterbody/{name}` | Get data for a specific water body |
 | `GET` | `/wqi/{location}` | Get WQI data for a location |
 | `GET` | `/waterbodies` | List all water bodies (with filters) |
@@ -116,14 +115,6 @@ Open http://localhost:8000/docs for the interactive API documentation.
 curl -X POST "http://localhost:8000/chat" \
   -H "Content-Type: application/json" \
   -d '{"question": "What is the WQI of Sabarmati River?"}'
-```
-
-### Example: Compare
-
-```bash
-curl -X POST "http://localhost:8000/compare" \
-  -H "Content-Type: application/json" \
-  -d '{"body_a": "Sabarmati River", "body_b": "Tapi River"}'
 ```
 
 ### React Integration Example
@@ -182,7 +173,6 @@ df = pd.read_sql("SELECT * FROM water_bodies", engine)
 React Dashboard
 ├── /map           → GET /waterbodies (map markers, WQI colours)
 ├── /chat          → POST /chat (chatbot widget)
-├── /compare       → POST /compare (side-by-side comparison)
 ├── /trends        → GET /wqi/{location}?start=&end= (time series)
 └── /body/{id}     → GET /waterbody/{name} (detail view)
 ```

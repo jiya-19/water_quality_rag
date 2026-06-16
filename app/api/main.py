@@ -84,13 +84,6 @@ class ChatResponse(BaseModel):
     model: str
     session_id: str | None = None
 
-
-class CompareRequest(BaseModel):
-    """Request body for /compare endpoint."""
-    body_a: str = Field(..., description="First water body name", example="Sabarmati River")
-    body_b: str = Field(..., description="Second water body name", example="Tapi River")
-
-
 class WaterBodyData(BaseModel):
     """Structured water body data for GET responses."""
     water_body: str
@@ -145,32 +138,6 @@ async def chat(
         model=result["model"],
         session_id=request.session_id,
     )
-
-
-@app.post("/compare", response_model=ChatResponse, tags=["Analysis"])
-async def compare_water_bodies(
-    request: CompareRequest,
-    service: WaterQualityRAGService = Depends(get_rag_service),
-):
-    """
-    Compare water quality between two water bodies.
-    Internally constructs a comparison question and routes
-    it through the full RAG pipeline.
-    """
-    question = (
-        f"Compare the water quality of {request.body_a} and {request.body_b}. "
-        f"Include their WQI scores, WQI categories, and key parameter differences "
-        f"such as pH, DO, BOD, TDS, Turbidity, Nitrate, and Coliform. "
-        f"Which water body has better quality and why?"
-    )
-    result = service.generate_response(question)
-    return ChatResponse(
-        answer=result["answer"],
-        sources=[SourceDocument(**s) for s in result.get("sources", [])],
-        is_on_topic=result["is_on_topic"],
-        model=result["model"],
-    )
-
 
 @app.get("/waterbody/{name}", response_model=WaterBodyData, tags=["Data"])
 async def get_water_body(name: str):
