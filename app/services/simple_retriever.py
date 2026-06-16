@@ -6,6 +6,17 @@ from app.services.data_loader import load_data
 from app.data.who_guidelines import WHO_KNOWLEDGE_BASE
 from app.core.logger import logger
 
+# ── Stop Words ────────────────────────────────────────────────────────
+STOP_WORDS = {
+    "what", "is", "the", "water", "quality", "of", "river", "lake", "pond", 
+    "reservoir", "stream", "creek", "at", "in", "on", "for", "limit", "standard", 
+    "acceptable", "permissible", "threshold", "safe", "who", "guideline", 
+    "guidelines", "standards", "limits", "does", "do", "how", "much", "many", 
+    "about", "tell", "me", "show", "get", "retrieve", "wqi", "category", "score", 
+    "value", "level", "levels", "parameter", "parameters", "which", "bodies", "body",
+    "wqi_category", "and", "or", "a", "an", "to"
+}
+
 def normalize_text(text: str) -> str:
     """
     Lowercases text and replaces non-alphanumeric characters with spaces,
@@ -13,6 +24,17 @@ def normalize_text(text: str) -> str:
     """
     cleaned = re.sub(r'[^a-zA-Z0-9\s]', ' ', text.lower())
     return " ".join(cleaned.split())
+
+def filter_query(query: str) -> str:
+    """
+    Remove stop words from the query to yield a string of important tokens.
+    """
+    norm = normalize_text(query)
+    tokens = norm.split()
+    filtered_tokens = [t for t in tokens if t not in STOP_WORDS]
+    if not filtered_tokens:
+        return norm
+    return " ".join(filtered_tokens)
 
 class SimpleRetriever:
     """
@@ -94,62 +116,12 @@ class SimpleRetriever:
         """
         q_lower = query.lower().strip()
         q_norm = normalize_text(query)
+        q_filtered = filter_query(query)
+        
         candidates = []
+        has_dataset_match = False
 
-        # ── 1. Search WHO guidelines ──────────────────────────────────────────
-        for item in self.cached_who_guidelines:
-            topic = item["topic"]
-            content = item["content"]
-            topic_lower = item["topic_lower"]
-            topic_norm = item["topic_norm"]
-            content_lower = item["content_lower"]
-
-            score = 0.0
-
-            # Exact matching on topic
-            fuzzy_score = 0.0
-            if topic_norm == q_norm:
-                score += 150.0
-                fuzzy_score = 100.0
-            # Partial matching on topic (word-bounded)
-            elif len(topic_norm) > 1 and re.search(rf"\b{re.escape(topic_norm)}\b", q_norm):
-                score += 100.0
-                token_set = rapidfuzz.fuzz.token_set_ratio(q_lower, topic_lower)
-                part_ratio = rapidfuzz.fuzz.partial_ratio(q_lower, topic_lower)
-                content_token_set = rapidfuzz.fuzz.token_set_ratio(q_lower, content_lower)
-                content_part_ratio = rapidfuzz.fuzz.partial_ratio(q_lower, content_lower)
-                fuzzy_score = max(token_set, part_ratio, content_token_set * 0.8, content_part_ratio * 0.8)
-            else:
-                token_set = rapidfuzz.fuzz.token_set_ratio(q_lower, topic_lower)
-                part_ratio = rapidfuzz.fuzz.partial_ratio(q_lower, topic_lower)
-                content_token_set = rapidfuzz.fuzz.token_set_ratio(q_lower, content_lower)
-                content_part_ratio = rapidfuzz.fuzz.partial_ratio(q_lower, content_lower)
-                fuzzy_score = max(token_set, part_ratio, content_token_set * 0.8, content_part_ratio * 0.8)
-
-            score += fuzzy_score
-
-            # WHO guidelines specific keyword boost
-            if any(term in q_lower for term in ["who", "guideline", "standard", "limit", "threshold", "acceptable"]):
-                # If topic matches parameters in query
-                if any(param in topic_lower for param in ["ph", "tds", "turbidity", "nitrate", "do", "bod", "coliform", "wqi"]):
-                    score += 50.0
-                else:
-                    score += 20.0
-
-            candidates.append({
-                "score": score,
-                "data": {
-                    "source": "who_guidelines",
-                    "water_body": "",
-                    "location": "",
-                    "topic": topic,
-                    "wqi": None,
-                    "wqi_category": "",
-                    "content": content
-                }
-            })
-
-        # ── 2. Search dataset rows ─────────────────────────────────────────────
+        # ── 1. Search dataset rows ─────────────────────────────────────────────
         for row in self.records:
             wb_lower = row["_wb_lower"]
             wb_norm = row["_wb_norm"]
@@ -157,38 +129,52 @@ class SimpleRetriever:
             loc_norm = row["_loc_norm"]
 
             score = 0.0
+            matched_entity = False
 
             # 1. Exact water body name match
             wb_fuzzy = 0.0
-            if wb_norm == q_norm:
+            if wb_norm == q_filtered:
                 score += 150.0
                 wb_fuzzy = 100.0
+                matched_entity = True
             # 2. Partial water body name match (word-bounded)
-            elif len(wb_norm) > 2 and (re.search(rf"\b{re.escape(wb_norm)}\b", q_norm) or re.search(rf"\b{re.escape(q_norm)}\b", wb_norm)):
+            elif len(wb_norm) > 2 and len(q_filtered) > 2 and (re.search(rf"\b{re.escape(wb_norm)}\b", q_filtered) or re.search(rf"\b{re.escape(q_filtered)}\b", wb_norm)):
                 score += 100.0
-                wb_token_set = rapidfuzz.fuzz.token_set_ratio(q_lower, wb_lower)
-                wb_part_ratio = rapidfuzz.fuzz.partial_ratio(q_lower, wb_lower)
+                wb_token_set = rapidfuzz.fuzz.token_set_ratio(q_filtered, wb_lower)
+                wb_part_ratio = rapidfuzz.fuzz.partial_ratio(q_filtered, wb_lower)
                 wb_fuzzy = max(wb_token_set, wb_part_ratio)
+                matched_entity = True
             else:
-                wb_token_set = rapidfuzz.fuzz.token_set_ratio(q_lower, wb_lower)
-                wb_part_ratio = rapidfuzz.fuzz.partial_ratio(q_lower, wb_lower)
+                wb_token_set = rapidfuzz.fuzz.token_set_ratio(q_filtered, wb_lower)
+                wb_part_ratio = rapidfuzz.fuzz.partial_ratio(q_filtered, wb_lower)
+                # Penalize partial ratio for short strings to avoid false positive substring matches
+                if len(wb_lower) < 4 or len(q_filtered) < 4:
+                    wb_part_ratio *= 0.4
                 wb_fuzzy = max(wb_token_set, wb_part_ratio)
 
             # 3. Exact location match
             loc_fuzzy = 0.0
-            if loc_norm == q_norm:
+            if loc_norm == q_filtered:
                 score += 120.0
                 loc_fuzzy = 100.0
+                matched_entity = True
             # 4. Partial location match (word-bounded)
-            elif len(loc_norm) > 2 and (re.search(rf"\b{re.escape(loc_norm)}\b", q_norm) or re.search(rf"\b{re.escape(q_norm)}\b", loc_norm)):
+            elif len(loc_norm) > 2 and len(q_filtered) > 2 and (re.search(rf"\b{re.escape(loc_norm)}\b", q_filtered) or re.search(rf"\b{re.escape(q_filtered)}\b", loc_norm)):
                 score += 80.0
-                loc_token_set = rapidfuzz.fuzz.token_set_ratio(q_lower, loc_lower)
-                loc_part_ratio = rapidfuzz.fuzz.partial_ratio(q_lower, loc_lower)
+                loc_token_set = rapidfuzz.fuzz.token_set_ratio(q_filtered, loc_lower)
+                loc_part_ratio = rapidfuzz.fuzz.partial_ratio(q_filtered, loc_lower)
                 loc_fuzzy = max(loc_token_set, loc_part_ratio)
+                matched_entity = True
             else:
-                loc_token_set = rapidfuzz.fuzz.token_set_ratio(q_lower, loc_lower)
-                loc_part_ratio = rapidfuzz.fuzz.partial_ratio(q_lower, loc_lower)
+                loc_token_set = rapidfuzz.fuzz.token_set_ratio(q_filtered, loc_lower)
+                loc_part_ratio = rapidfuzz.fuzz.partial_ratio(q_filtered, loc_lower)
+                # Penalize partial ratio for short strings to avoid false positive substring matches
+                if len(loc_lower) < 4 or len(q_filtered) < 4:
+                    loc_part_ratio *= 0.4
                 loc_fuzzy = max(loc_token_set, loc_part_ratio)
+
+            if matched_entity:
+                has_dataset_match = True
 
             fuzzy_score = max(wb_fuzzy, loc_fuzzy)
             score += fuzzy_score
@@ -215,8 +201,73 @@ class SimpleRetriever:
                 }
             })
 
+        # ── 2. Search WHO guidelines (Only if trigger words are present) ──────
+        who_triggers = {"who", "guideline", "standard", "limit", "permissible", "acceptable", "threshold", "safe", "guidelines", "standards", "limits"}
+        search_who = any(trigger in q_lower for trigger in who_triggers)
+
+        if search_who:
+            for item in self.cached_who_guidelines:
+                topic = item["topic"]
+                content = item["content"]
+                topic_lower = item["topic_lower"]
+                topic_norm = item["topic_norm"]
+                content_lower = item["content_lower"]
+
+                score = 0.0
+
+                # Exact matching on topic
+                fuzzy_score = 0.0
+                if topic_norm == q_norm:
+                    score += 150.0
+                    fuzzy_score = 100.0
+                # Partial matching on topic (word-bounded)
+                elif len(topic_norm) > 1 and re.search(rf"\b{re.escape(topic_norm)}\b", q_norm):
+                    score += 100.0
+                    token_set = rapidfuzz.fuzz.token_set_ratio(q_filtered, topic_lower)
+                    part_ratio = rapidfuzz.fuzz.partial_ratio(q_filtered, topic_lower)
+                    content_token_set = rapidfuzz.fuzz.token_set_ratio(q_filtered, content_lower)
+                    content_part_ratio = rapidfuzz.fuzz.partial_ratio(q_filtered, content_lower)
+                    fuzzy_score = max(token_set, part_ratio, content_token_set * 0.8, content_part_ratio * 0.8)
+                else:
+                    token_set = rapidfuzz.fuzz.token_set_ratio(q_filtered, topic_lower)
+                    part_ratio = rapidfuzz.fuzz.partial_ratio(q_filtered, topic_lower)
+                    content_token_set = rapidfuzz.fuzz.token_set_ratio(q_filtered, content_lower)
+                    content_part_ratio = rapidfuzz.fuzz.partial_ratio(q_filtered, content_lower)
+                    fuzzy_score = max(token_set, part_ratio, content_token_set * 0.8, content_part_ratio * 0.8)
+
+                score += fuzzy_score
+
+                # WHO guidelines specific keyword boost
+                if any(term in q_lower for term in ["who", "guideline", "standard", "limit", "threshold", "acceptable"]):
+                    # If topic matches parameters in query
+                    if any(param in topic_lower for param in ["ph", "tds", "turbidity", "nitrate", "do", "bod", "coliform", "wqi"]):
+                        score += 50.0
+                    else:
+                        score += 20.0
+
+                # Cap score if a dataset match exists, preventing WHO from outranking dataset
+                if has_dataset_match:
+                    score = min(score, 50.0)
+
+                candidates.append({
+                    "score": score,
+                    "data": {
+                        "source": "who_guidelines",
+                        "water_body": "",
+                        "location": "",
+                        "topic": topic,
+                        "wqi": None,
+                        "wqi_category": "",
+                        "content": content
+                    }
+                })
+
         # Sort candidates by score descending
         candidates.sort(key=lambda x: x["score"], reverse=True)
+
+        # Inject score inside candidates data dict for retrieval-score-based topic detection
+        for c in candidates:
+            c["data"]["score"] = c["score"]
 
         # Return top_k candidates' data
         return [c["data"] for c in candidates[:top_k]]

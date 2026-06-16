@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     # ── RAG ─────────────────────────────────────────────────
     top_k_results: int = 3
+    relevance_threshold: float = 60.0
 
     # ── Application ─────────────────────────────────────────
     app_env: str = "development"

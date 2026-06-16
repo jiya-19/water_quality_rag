@@ -68,20 +68,53 @@ OFF_TOPIC_RESPONSE: str = (
 )
 
 
+from app.services.data_loader import load_data
+from app.services.simple_retriever import STOP_WORDS, normalize_text
+import re
+
+_known_wb_names = None
+_known_locations = None
+_known_wb_tokens = None
+_known_loc_tokens = None
+
+def _get_known_entities():
+    global _known_wb_names, _known_locations
+    if _known_wb_names is None:
+        try:
+            df = load_data()
+            _known_wb_names = {str(n).lower().strip() for n in df["Water Body Name"].dropna() if len(str(n).strip()) > 2}
+            _known_locations = {str(l).lower().strip() for l in df["Location"].dropna() if len(str(l).strip()) > 2}
+        except Exception:
+            _known_wb_names = set()
+            _known_locations = set()
+    return _known_wb_names, _known_locations
+
+
+def _get_known_tokens():
+    global _known_wb_tokens, _known_loc_tokens
+    if _known_wb_tokens is None:
+        wb_names, locations = _get_known_entities()
+        _known_wb_tokens = set()
+        for name in wb_names:
+            norm = normalize_text(name)
+            for token in norm.split():
+                if token not in STOP_WORDS and len(token) > 2:
+                    _known_wb_tokens.add(token)
+        _known_loc_tokens = set()
+        for loc in locations:
+            norm = normalize_text(loc)
+            for token in norm.split():
+                if token not in STOP_WORDS and len(token) > 2:
+                    _known_loc_tokens.add(token)
+    return _known_wb_tokens, _known_loc_tokens
+
+
 def is_water_quality_related(query: str) -> bool:
     """
     Determine whether a query is related to water quality topics.
 
-    Uses a two-pass check:
-      1. Reject if strong off-topic signals are found.
-      2. Accept if water quality keywords are present.
-
-    Args:
-        query: The raw user query string.
-
-    Returns:
-        True if query is likely water-quality related,
-        False if it should be blocked.
+    Allows water body names and locations to pass even if general keywords
+    such as WQI, pH, DO, TDS are absent.
     """
     query_lower = query.lower().strip()
     tokens = set(query_lower.split())
@@ -95,6 +128,14 @@ def is_water_quality_related(query: str) -> bool:
     for keyword in WATER_QUALITY_KEYWORDS:
         if keyword in query_lower:
             return True
+
+    # Pass 3: Check if query contains any known water body name or location (word-bounded / token intersection)
+    query_norm = normalize_text(query_lower)
+    query_words = set(query_norm.split())
+    wb_tokens, loc_tokens = _get_known_tokens()
+
+    if query_words.intersection(wb_tokens) or query_words.intersection(loc_tokens):
+        return True
 
     # Edge case: very short queries (1–2 words) might be ambiguous.
     # Default to allowing them through to the LLM (which will also filter).

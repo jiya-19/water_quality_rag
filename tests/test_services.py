@@ -252,3 +252,63 @@ class TestSimpleRetriever:
         who_sources = [r for r in results_who if r["source"] == "who_guidelines"]
         assert len(who_sources) > 0
         assert any(r["topic"] == "pH" for r in who_sources)
+
+    def test_simple_retriever_stop_word_filtering(self):
+        """filter_query should filter out stop words and keep keywords."""
+        from app.services.simple_retriever import filter_query
+        query = "What is the water quality of Sabarmati River?"
+        filtered = filter_query(query)
+        assert filtered == "sabarmati"
+
+    def test_simple_retriever_who_conditional_trigger(self, tmp_path):
+        """WHO guidelines should only be searched when trigger words are present."""
+        from app.services.simple_retriever import SimpleRetriever
+        csv_content = (
+            "Water Body Name,Location,Latitude,Longitude,Year,pH,"
+            "Dissolved Oxygen (DO),Biological Oxygen Demand (BOD),"
+            "Total Dissolved Solids (TDS),Turbidity,Nitrate,Coliform,"
+            "Water Quality Index (WQI),Water Quality Category\n"
+            "Sabarmati River,Ahmedabad,23.0,72.0,2025,7.2,6.5,2.1,310,3.4,1.2,10,82.0,Good\n"
+        )
+        csv_file = tmp_path / "test_data.csv"
+        csv_file.write_text(csv_content)
+
+        retriever = SimpleRetriever(csv_path=csv_file)
+        
+        # Trigger word present
+        results_with_trigger = retriever.search("What is the WHO limit for pH?", top_k=5)
+        who_count = sum(1 for r in results_with_trigger if r["source"] == "who_guidelines")
+        assert who_count > 0
+
+        # No trigger word
+        results_no_trigger = retriever.search("What is the pH of Sabarmati?", top_k=5)
+        who_count_no_trigger = sum(1 for r in results_no_trigger if r["source"] == "who_guidelines")
+        assert who_count_no_trigger == 0
+
+    def test_simple_retriever_dataset_prioritization(self, tmp_path):
+        """WHO guidelines should not outrank dataset matches when a dataset match exists."""
+        from app.services.simple_retriever import SimpleRetriever
+        csv_content = (
+            "Water Body Name,Location,Latitude,Longitude,Year,pH,"
+            "Dissolved Oxygen (DO),Biological Oxygen Demand (BOD),"
+            "Total Dissolved Solids (TDS),Turbidity,Nitrate,Coliform,"
+            "Water Quality Index (WQI),Water Quality Category\n"
+            "Sabarmati River,Ahmedabad,23.0,72.0,2025,7.2,6.5,2.1,310,3.4,1.2,10,82.0,Good\n"
+        )
+        csv_file = tmp_path / "test_data.csv"
+        csv_file.write_text(csv_content)
+
+        retriever = SimpleRetriever(csv_path=csv_file)
+
+        # Query matches dataset and has trigger word for WHO
+        results = retriever.search("What is the water quality limit of Sabarmati River?", top_k=5)
+        assert len(results) > 0
+        # First match must be the dataset row, not WHO guidelines
+        assert results[0]["source"] == "dataset"
+        assert results[0]["water_body"] == "Sabarmati River"
+
+    def test_topic_guard_water_body_fallback(self):
+        """topic_guard should allow known water bodies even if WQI, pH, etc. are absent."""
+        from app.utils.topic_guard import is_water_quality_related
+        # Sabarmati is a known water body in the real CSV. It should pass.
+        assert is_water_quality_related("Tell me about Sabarmati")

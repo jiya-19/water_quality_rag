@@ -174,7 +174,7 @@ class WaterQualityRAGService:
         """
         Generate an answer for the given user query using RAG.
 
-        Applies topic guard before invoking the LLM.
+        Applies topic guard using retrieval-score-based detection.
 
         Args:
             query: The user's question string.
@@ -190,21 +190,31 @@ class WaterQualityRAGService:
             logger.info("Lazy loading RAG service...")
             self.initialize()
 
-        # ── Topic Guard ──────────────────────────────────────
-        if not is_water_quality_related(query):
-            logger.info(f"Off-topic query blocked: '{query[:80]}'")
-            return {
-                "answer": get_off_topic_response(),
-                "sources": [],
-                "is_on_topic": False,
-                "model": settings.groq_model_name,
-            }
-
-        # ── Retrieval + Generation ───────────────────────────
+        # ── Retrieval + Score-based Topic Guard ───────────────────────────
         logger.info(f"Processing query: '{query[:80]}'")
         try:
             # Retrieve relevant records
             matched_rows = self._retriever.search(query)
+
+            # Check top result relevance score
+            top_score = matched_rows[0].get("score", 0.0) if matched_rows else 0.0
+
+            # Pass 1 from topic guard: check for strong off-topic signals
+            from app.utils.topic_guard import OFF_TOPIC_STRONG_SIGNALS
+            query_lower = query.lower()
+            has_strong_off_topic_signal = any(signal in query_lower for signal in OFF_TOPIC_STRONG_SIGNALS)
+
+            # Accept only if score is above the configured relevance threshold and there are no off-topic signals
+            is_on_topic = (top_score >= settings.relevance_threshold) and not has_strong_off_topic_signal
+
+            if not is_on_topic:
+                logger.info(f"Query blocked by score-based topic guard (score: {top_score:.1f}, off-topic: {has_strong_off_topic_signal}): '{query[:80]}'")
+                return {
+                    "answer": get_off_topic_response(),
+                    "sources": [],
+                    "is_on_topic": False,
+                    "model": settings.groq_model_name,
+                }
 
             # Build context from matched rows
             context_str = _format_matched_rows(matched_rows)
