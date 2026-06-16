@@ -1,6 +1,6 @@
 # 💧 Water Quality RAG Chatbot
 
-A production-ready **Retrieval-Augmented Generation (RAG)** chatbot for water quality monitoring. Built with **Groq LLM**, **LangChain**, **FAISS**, and **HuggingFace embeddings** — architected for seamless React dashboard integration via **FastAPI**.
+A production-ready **Retrieval-Augmented Generation (RAG)** chatbot for water quality monitoring. Built with **Groq LLM** and architected for seamless React dashboard integration via **FastAPI**.
 
 ---
 
@@ -11,17 +11,18 @@ A production-ready **Retrieval-Augmented Generation (RAG)** chatbot for water qu
 water_quality_rag/
 ├── app/
 │   ├── core/
-│   │   ├── config.py          # Pydantic settings (reads .env)
-│   │   └── logger.py          # Loguru logging setup
+│   │   ├── config.py         
+│   │   └── logger.py         
 │   │
 │   ├── data/
-│   │   ├── water_quality_data.csv   # Your dataset (replace with real data)
-│   │   ├── who_guidelines.py        # WHO knowledge base (static)
-│   │   └── faiss_index/             # Auto-created FAISS index (gitignored)
+│   │   ├── water_quality_data.csv   
+│   │   ├── who_guidelines.py        
+│   │   
 │   │
 │   ├── services/
 │   │   ├── data_loader.py     # CSV → LangChain Documents
 │   │   ├── vector_store.py    # FAISS build/load/retrieve
+|   |   |── simple_retriever.py
 │   │   └── rag_pipeline.py    # Core RAG chain (Groq + LangChain)
 │   │
 │   ├── utils/
@@ -34,14 +35,14 @@ water_quality_rag/
 │       └── streamlit_app.py   # Streamlit prototype chat UI
 │
 ├── scripts/
-│   └── build_index.py         # Standalone FAISS index builder
+│   └── build_index.py         
 │
 ├── tests/
 │   └── test_services.py       # Unit tests (pytest)
 │
 ├── .env
 ├── requirements.txt           # All Python dependencies
-├── .gitignore                 # Excludes .env, FAISS index, venv
+├── .gitignore                 # Excludes .env, venv
 └── README.md
 ```
 
@@ -191,20 +192,6 @@ React Dashboard
 - `http://localhost:5173` (Vite)
 
 Add production domain to `CORS_ORIGINS` in `.env`.
-
----
-
-## 🔑 Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GROQ_API_KEY` | ✅ | — | Your Groq API key |
-| `GROQ_MODEL_NAME` | ❌ | `llama-3.1-8b-instant` | Groq model to use |
-| `EMBEDDING_MODEL_NAME` | ❌ | `sentence-transformers/all-MiniLM-L6-v2` | HuggingFace embedding model |
-| `FAISS_INDEX_PATH` | ❌ | `./app/data/faiss_index` | Where to save/load FAISS index |
-| `DATASET_PATH` | ❌ | `./app/data/water_quality_data.csv` | Path to your CSV dataset |
-| `TOP_K_RESULTS` | ❌ | `3` | Documents to retrieve per query |
-| `APP_ENV` | ❌ | `development` | `development` or `production` |
 
 ---
 
