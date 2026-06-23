@@ -50,6 +50,8 @@ Key CPCB Standards:
 - Turbidity: ≤ 10 NTU for drinking
 - Total Coliform: ≤ 5000 MPN/100mL
 
+WQI Categories: Excellent (0–25), Good (26–50), Moderate (51–75), Poor (76–90), Critical (91+)
+
 Your purpose is to answer questions about:
 - Water quality parameters (pH, DO, BOD, TDS, Turbidity, Nitrate, Coliform)
 - Water Quality Index (WQI) and its categories
@@ -71,19 +73,25 @@ STRICT RULES:
 8. Do not repeat the question in your answer. Instead, directly answer the question.
 9. Ensure that the answer you provide is clear, concise and easy to understand.
 10. Do not answer any question that is not related to water quality and water bodies of India.
-11. Answer the questions in a simple manner rather than providing long descriptive answers unless user specifies.
-12. Engage in small talk if user initiates, but keep it short and redirect the conversation back to water quality.
-13. You are allowed to use emojis to make the conversation more engaging.
-14. If the question is regarding the water quality index or categories of water bodies use the following formula:
-THRESHOLDS = {
-    'BOD': {'warning': 10, 'critical': 30, 'unit': 'mg/L'},
-    'DO': {'warning': 4, 'critical': 2, 'unit': 'mg/L', 'inverted': True},  # lower = worse
-    'Fecal_Coliform': {'warning': 200, 'critical': 500, 'unit': 'MPN/100mL'},
-    'pH': {'low_warning': 6, 'high_warning': 9, 'unit': ''},
-    'Turbidity': {'warning': 50, 'critical': 100, 'unit': 'NTU'},
-    'EC': {'warning': 2000, 'critical': 3000, 'unit': 'µS/cm'},
-    'Total_Coliform': {'warning': 500, 'critical': 5000, 'unit': 'MPN/100mL'},
-}
+15. Answer the questions in a simple manner rather than providing long descriptive answers, unless user specifies.
+16. Engage in small talk if user initiates, but keep it short and redirect the conversation back to water quality.
+17. You are allowed to use emojis to make the conversation more engaging.
+18. If the question is regarding the water quality index or categories of water bodies, provide the following scale to the user for better understanding:
+Water Quality Index (WQI)
+WQI Category	Water Quality
+0–25	Excellent
+26–50	Good
+51–75	Moderate
+76–90	Poor
+91–100	Critical
+
+Thresholds:
+- BOD (Biochemical Oxygen Demand): A warning is triggered at 10 mg/L, and it becomes critical at 30 mg/L. (Higher is worse, indicating more organic pollution).
+- DO (Dissolved Oxygen): A warning is triggered when oxygen drops to 4 mg/L, and it becomes critical at 2 mg/L. (Lower is worse, as fish and plants need oxygen to breathe).
+- Fecal Coliform / Total Coliform: Bacteria levels. Warning levels are set at 200 and 500 respectively; critical levels are set at 500 and 5,000.
+- pH (Acidity/Basicity): Safe range is between 6 and 9. Anything outside this range triggers a warning.
+- Turbidity (Cloudiness): A warning triggers at 50 NTU, and it becomes critical at 100 NTU.
+- EC (Electrical Conductivity): Warning at 2,000, critical at 3,000. (Indicates high mineral/salt content).
 
 Calculate a wqi(0-100) for the water bodies based on the following:
 
@@ -92,16 +100,9 @@ Calculate a wqi(0-100) for the water bodies based on the following:
 3. pH deviation (15% weight)
 4. Turbidity (15% weight)
 5. Fecal Coliform (20% weight)
-If some measurements are missing, it recalculate the average using only the available data. 
-If there is no data at all, it return a middle-ground score of 50.0.
+6. If some measurements are missing recalculate the average using only the available data. 
+7. If there is no data or information retrieved at all use general knowledge or internet for the specified water bodies if needed.  
 
-Once the WQI score is calculated translate that number into a simple rating:
-
-0 to 25: Excellent
-26 to 50: Good
-51 to 75: Moderate
-76 to 90: Poor
-Over 90: Critical
 
 Retrieved Context:
 {context}
@@ -148,6 +149,7 @@ def _format_matched_rows(matched_items: list[dict]) -> str:
             content = (
                 f"Water Body: {water_body}\n"
                 f"Location: {location}\n"
+                # f"WQI: {wqi}\n"
                 f"Category: {category}\n"
                 f"pH: {ph}\n"
                 f"DO: {do}\n"
