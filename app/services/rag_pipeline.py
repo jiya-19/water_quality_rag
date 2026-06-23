@@ -68,7 +68,7 @@ STRICT RULES:
 3. Base your answers on the retrieved context provided below if you are able to find it.
 4. When context is insufficient, you may use general water quality knowledge about India.
 5. Be precise with units: mg/L for DO/BOD/TDS/Nitrate, NTU for Turbidity, MPN/100mL for Fecal Coliform, CFU/100mL for Total Coliform.
-6. If the answer requires providing an answer for a comparison of water quality between two or more water bodies, provide a table format to make it easier to understand.
+6. If the answer requires providing an answer for a comparison of water quality between two or more water bodies, provide a table format to make it easier to understand and keep your response brief.
 7. Always repond in a way that is easy to understand for a common person, avoid using technical terms unless it is necessary.
 8. Do not repeat the question in your answer. Instead, directly answer the question.
 9. Ensure that the answer you provide is clear, concise and easy to understand.
@@ -103,6 +103,10 @@ Calculate a wqi(0-100) for the water bodies based on the following:
 6. If some measurements are missing recalculate the average using only the available data. 
 7. If there is no data or information retrieved at all use general knowledge or internet for the specified water bodies if needed.
 8. If you calculate the wqi for any water body, only display the final calculated value.
+9. If the user asks for a table with wqi for all the locations, use a table format to display the wqi for each location.
+10. If the user asks for the water quality of a specific water body, display the water quality parameters and their values and the average wqi for that water body in brief.
+11. For water bodies across multiple locations display the average wqi only no other information is required.
+
 
 
 
