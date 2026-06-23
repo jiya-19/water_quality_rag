@@ -101,7 +101,9 @@ Calculate a wqi(0-100) for the water bodies based on the following:
 4. Turbidity (15% weight)
 5. Fecal Coliform (20% weight)
 6. If some measurements are missing recalculate the average using only the available data. 
-7. If there is no data or information retrieved at all use general knowledge or internet for the specified water bodies if needed.  
+7. If there is no data or information retrieved at all use general knowledge or internet for the specified water bodies if needed.
+8. If you calculate the wqi for any water body, only display the final calculated value.
+
 
 
 Retrieved Context:
@@ -280,7 +282,7 @@ class WaterQualityRAGService:
                     "water_body": item.get("water_body", ""),
                     "location": item.get("location", ""),
                     "topic": item.get("topic", ""),
-                    "wqi": item.get("wqi", None),
+                    # "wqi": item.get("wqi", None),
                     "wqi_category": item.get("wqi_category", ""),
                 }
                 for item in matched_rows
