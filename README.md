@@ -147,13 +147,13 @@ pytest tests/test_services.py::TestTopicGuard -v   # single class
 
 ## 📊 WQI Reference Scale
 
-| WQI Score | Category | Interpretation |
-|-----------|----------|----------------|
-| 90 – 100 | 🟢 Excellent | Safe for drinking, minimal treatment |
-| 70 – 89 | 🟡 Good | Safe with standard treatment |
-| 50 – 69 | 🟠 Medium | Suitable for irrigation, treatment needed for drinking |
-| 25 – 49 | 🔴 Bad | High pollution, significant treatment required |
-| 0 – 24 | ⚫ Very Bad | Severely polluted, not fit for consumption |
+| Category | WQI Range |
+|---|---:|
+| Excellent | 0–25 |
+| Good | 26–50 |
+| Moderate | 51–75 |
+| Poor | 76–90 |
+| Critical | 91+ |
 
 ---
 

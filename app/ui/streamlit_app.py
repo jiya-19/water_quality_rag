@@ -145,13 +145,13 @@ def _render_sidebar():
         # ── WQI Reference ────────────────────────────────────
         st.markdown("### 🗺️ WQI Reference Scale")
         st.markdown("""
-        | Score | Category |
-        |-------|----------|
-        | 90–100 | Excellent |
-        | 70–89  | Good |
-        | 50–69  | Medium |
-        | 25–49  | Bad |
-        | 0–24   | Worst |
+        | Category | WQI Range |
+        |---|---:|
+        | Excellent | 0–25 |
+        | Good | 26–50 |
+        | Moderate | 51–75 |
+        | Poor | 76–90 |
+        | Critical | 91+ |
         """)
 
         st.divider()
