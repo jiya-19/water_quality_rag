@@ -216,7 +216,8 @@ class WaterQualityRAGService:
             groq_api_key=settings.groq_api_key,
             model_name=settings.groq_model_name,
             temperature=0.1,
-            max_tokens=1024,
+            max_tokens=2048,
+            model_kwargs={"include_reasoning": False},
         )
         logger.info("Groq initialized")
 
