@@ -16,19 +16,17 @@ Architecture:
   [Prompt Template]  (retrieved context + question)
       │
       ▼
-  [Groq LLM]  (llama-3.1-8b-instant or configured model)
+  [Groq LLM]  
       │
       ▼
   [Structured Response]
 
-The pipeline is built as a LangChain LCEL (LangChain Expression
-Language) chain for clean composition and future streaming support.
 """
 
 from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_groq import ChatGroq
+from groq import Groq
 
 from app.core.config import settings
 from app.core.logger import logger
@@ -188,7 +186,7 @@ class WaterQualityRAGService:
     """
 
     def __init__(self) -> None:
-        self._llm: ChatGroq | None = None
+        self._llm: Groq | None = None
         self._retriever: SimpleRetriever | None = None
         self._is_initialized = False
 
@@ -212,12 +210,8 @@ class WaterQualityRAGService:
 
         # Step 2: Initialize Groq LLM
         logger.info("Initializing Groq...")
-        self._llm = ChatGroq(
-            groq_api_key=settings.groq_api_key,
-            model_name=settings.groq_model_name,
-            temperature=0.1,
-            max_tokens=2048,
-            model_kwargs={"include_reasoning": False},
+        self._llm = Groq(
+            api_key=settings.groq_api_key,
         )
         logger.info("Groq initialized")
 
@@ -273,12 +267,25 @@ class WaterQualityRAGService:
             # Build context from matched rows
             context_str = _format_matched_rows(matched_rows)
 
-            # Generate answer via prompt template + Groq invocation
-            prompt = _build_prompt()
-            formatted_prompt = prompt.format_messages(context=context_str, question=query)
-            
-            response = self._llm.invoke(formatted_prompt)
-            answer = response.content
+            # Generate answer via prompt template + Groq invocation        
+            response = self._llm.chat.completions.create(
+                    model=settings.groq_model_name,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": SYSTEM_PROMPT.format(context=context_str)
+                        },
+                        {
+                            "role": "user",
+                            "content": query
+                        }
+                    ],
+                    temperature=0.1,
+                    max_tokens=1024,
+                    include_reasoning=False
+                )
+
+            answer = response.choices[0].message.content
 
             # Build source metadata for API / UI display exactly as before
             sources = [
