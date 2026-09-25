@@ -281,11 +281,12 @@ class WaterQualityRAGService:
                         }
                     ],
                     temperature=0.1,
-                    max_tokens=1024,
+                    max_completion_tokens=2048,
+                    reasoning_effort="low",
                     include_reasoning=False
                 )
 
-            answer = response.choices[0].message.content
+            answer = response.choices[0].message.content or ""
 
             # Build source metadata for API / UI display exactly as before
             sources = [
